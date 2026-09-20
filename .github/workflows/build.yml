@@ -1,0 +1,95 @@
+name: 自动构建班主任工作台桌面端
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: 检出仓库源码
+        uses: actions/checkout@v4
+
+      - name: 配置 Node.js 环境
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 配置 Rust 编译工具链
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 组装工程并编译单文件可执行程序
+        shell: bash
+        run: |
+          npm install -g @tauri-apps/cli@1.6.0
+          mkdir -p src-tauri/src
+          
+          cat << 'EOF' > src-tauri/Cargo.toml
+          [package]
+          name = "class-master"
+          version = "1.0.0"
+          edition = "2021"
+
+          [build-dependencies]
+          tauri-build = { version = "1.5", features = [] }
+
+          [dependencies]
+          tauri = { version = "1.5", features = ["window-close", "shell-open"] }
+          serde = { version = "1.0", features = ["derive"] }
+          serde_json = "1.0"
+          EOF
+
+          cat << 'EOF' > src-tauri/tauri.conf.json
+          {
+            "build": {
+              "beforeDevCommand": "",
+              "beforeBuildCommand": "",
+              "devPath": "../",
+              "distDir": "../"
+            },
+            "package": {
+              "productName": "班主任工作台",
+              "version": "1.0.0"
+            },
+            "tauri": {
+              "bundle": {
+                "active": false
+              },
+              "windows": [
+                {
+                  "title": "班主任工作台 - 智慧班级管理系统",
+                  "width": 1280,
+                  "height": 820,
+                  "minWidth": 960,
+                  "minHeight": 640,
+                  "resizable": true
+                }
+              ]
+            }
+          }
+          EOF
+
+          cat << 'EOF' > src-tauri/build.rs
+          fn main() {
+              tauri_build::build()
+          }
+          EOF
+
+          cat << 'EOF' > src-tauri/src/main.rs
+          #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+          fn main() {
+              tauri::Builder::default()
+                  .run(tauri::generate_context!())
+                  .expect("运行班主任工作台异常");
+          }
+          EOF
+
+          npx tauri build --no-bundle
+
+      - name: 归档并导出 EXE 文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: 班主任工作台_Windows免安装版
+          path: src-tauri/target/release/班主任工作台.exe
