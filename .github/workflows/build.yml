@@ -16,7 +16,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: 组装工程并直接编译 EXE
-        shell: powershell
+        shell: pwsh
         run: |
           # 1. 准备静态资源目录
           New-Item -ItemType Directory -Force -Path dist
@@ -61,7 +61,7 @@ jobs:
           lto = true
           opt-level = "z"
           strip = true
-          '@ | Set-Content -Path src-tauri/Cargo.toml -Encoding UTF8
+          '@ | Set-Content -Path src-tauri/Cargo.toml -Encoding utf8NoBOM
 
           # 5. 写入 tauri.conf.json
           @'
@@ -100,14 +100,14 @@ jobs:
               ]
             }
           }
-          '@ | Set-Content -Path src-tauri/tauri.conf.json -Encoding UTF8
+          '@ | Set-Content -Path src-tauri/tauri.conf.json -Encoding utf8NoBOM
 
           # 6. 写入 build.rs
           @'
           fn main() {
               tauri_build::build()
           }
-          '@ | Set-Content -Path src-tauri/build.rs -Encoding UTF8
+          '@ | Set-Content -Path src-tauri/build.rs -Encoding utf8NoBOM
 
           # 7. 写入 main.rs
           @'
@@ -117,9 +117,16 @@ jobs:
                   .run(tauri::generate_context!())
                   .expect("运行班主任工作台异常");
           }
-          '@ | Set-Content -Path src-tauri/src/main.rs -Encoding UTF8
+          '@ | Set-Content -Path src-tauri/src/main.rs -Encoding utf8NoBOM
 
-          # 8. 编译并导出 EXE
+          # 8. 自检：验证无 BOM 且 JSON 合法
+          foreach ($f in @('src-tauri/Cargo.toml', 'src-tauri/tauri.conf.json', 'src-tauri/build.rs', 'src-tauri/src/main.rs')) {
+            $head = [System.IO.File]::ReadAllBytes((Resolve-Path $f).Path)[0..2]
+            if ($head[0] -eq 0xEF -and $head[1] -eq 0xBB -and $head[2] -eq 0xBF) { throw "$f 开头带 BOM，将导致解析失败" }
+          }
+          Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json | Out-Null
+
+          # 9. 编译并导出 EXE
           cd src-tauri
           cargo build --release
           cd ..
