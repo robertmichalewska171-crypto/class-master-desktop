@@ -18,8 +18,14 @@ jobs:
       - name: 组装工程并直接编译 EXE
         shell: bash
         run: |
+          # 1. 隔离网页静态资源，防止递归打包多余文件
+          mkdir -p dist
+          cp index.html dist/index.html
+
+          # 2. 建立 Tauri 工程目录
           mkdir -p src-tauri/src
           
+          # 3. 写入 Cargo.toml (特性严格声明为 api-all，满足全部 API 校验)
           cat << 'EOF' > src-tauri/Cargo.toml
           [package]
           name = "class-master"
@@ -30,7 +36,7 @@ jobs:
           tauri-build = { version = "1.5", features = [] }
 
           [dependencies]
-          tauri = { version = "1.5", features = ["window-close", "shell-open"] }
+          tauri = { version = "1.5", features = ["api-all"] }
           serde = { version = "1.0", features = ["derive"] }
           serde_json = "1.0"
 
@@ -42,13 +48,14 @@ jobs:
           strip = true
           EOF
 
+          # 4. 写入完整合规的 tauri.conf.json
           cat << 'EOF' > src-tauri/tauri.conf.json
           {
             "build": {
               "beforeDevCommand": "",
               "beforeBuildCommand": "",
-              "devPath": "../",
-              "distDir": "../"
+              "devPath": "../dist",
+              "distDir": "../dist"
             },
             "package": {
               "productName": "班主任工作台",
@@ -61,6 +68,9 @@ jobs:
               "bundle": {
                 "active": false,
                 "identifier": "com.classmaster.app"
+              },
+              "security": {
+                "csp": null
               },
               "windows": [
                 {
@@ -76,6 +86,7 @@ jobs:
           }
           EOF
 
+          # 5. 写入构建脚本与入口源码
           cat << 'EOF' > src-tauri/build.rs
           fn main() {
               tauri_build::build()
@@ -91,11 +102,11 @@ jobs:
           }
           EOF
 
-          # 编译独立 EXE
+          # 6. 直接由 Cargo 工具链编译为独立 Release EXE
           cd src-tauri
           cargo build --release
 
-          # 复制并重命名
+          # 7. 导出最终成品
           cp target/release/class-master.exe ../班主任工作台.exe
 
       - name: 归档并导出 EXE 文件
