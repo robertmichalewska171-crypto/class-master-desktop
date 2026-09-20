@@ -55,8 +55,12 @@ jobs:
               "version": "1.0.0"
             },
             "tauri": {
+              "allowlist": {
+                "all": true
+              },
               "bundle": {
-                "active": false
+                "active": false,
+                "identifier": "com.classmaster.app"
               },
               "windows": [
                 {
@@ -87,11 +91,11 @@ jobs:
           }
           EOF
 
-          # 直接使用 Rust 官方工具链极速编译，避免命令行参数冲突
+          # 编译独立 EXE
           cd src-tauri
           cargo build --release
 
-          # 复制并命名为中文软件名
+          # 复制并重命名
           cp target/release/class-master.exe ../班主任工作台.exe
 
       - name: 归档并导出 EXE 文件
