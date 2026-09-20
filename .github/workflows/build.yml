@@ -16,17 +16,32 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: 组装工程并直接编译 EXE
-        shell: bash
+        shell: powershell
         run: |
-          # 1. 隔离网页静态资源，防止递归打包多余文件
-          mkdir -p dist
-          cp index.html dist/index.html
+          # 1. 准备静态资源目录
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item index.html dist/index.html
 
-          # 2. 建立 Tauri 工程目录
-          mkdir -p src-tauri/src
-          
-          # 3. 写入 Cargo.toml (特性严格声明为 api-all，满足全部 API 校验)
-          cat << 'EOF' > src-tauri/Cargo.toml
+          # 2. 准备源码与图标目录
+          New-Item -ItemType Directory -Force -Path src-tauri/src
+          New-Item -ItemType Directory -Force -Path src-tauri/icons
+
+          # 3. 原生生成合规的 32x32 icon.ico (满足 Windows Resource 编译要求)
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap 32, 32
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(229, 115, 115))
+          $g.FillRectangle($brush, 0, 0, 32, 32)
+          $hIcon = $bmp.GetHicon()
+          $icon = [System.Drawing.Icon]::FromHandle($hIcon)
+          $fs = New-Object System.IO.FileStream "src-tauri/icons/icon.ico", ([System.IO.FileMode]::Create)
+          $icon.Save($fs)
+          $fs.Close()
+          $bmp.Dispose()
+          $g.Dispose()
+
+          # 4. 写入 Cargo.toml (特性严格配置为 api-all)
+          @'
           [package]
           name = "class-master"
           version = "1.0.0"
@@ -46,10 +61,10 @@ jobs:
           lto = true
           opt-level = "z"
           strip = true
-          EOF
+          '@ | Set-Content -Path src-tauri/Cargo.toml -Encoding UTF8
 
-          # 4. 写入完整合规的 tauri.conf.json
-          cat << 'EOF' > src-tauri/tauri.conf.json
+          # 5. 写入 tauri.conf.json
+          @'
           {
             "build": {
               "beforeDevCommand": "",
@@ -67,7 +82,8 @@ jobs:
               },
               "bundle": {
                 "active": false,
-                "identifier": "com.classmaster.app"
+                "identifier": "com.classmaster.app",
+                "icon": ["icons/icon.ico"]
               },
               "security": {
                 "csp": null
@@ -84,30 +100,30 @@ jobs:
               ]
             }
           }
-          EOF
+          '@ | Set-Content -Path src-tauri/tauri.conf.json -Encoding UTF8
 
-          # 5. 写入构建脚本与入口源码
-          cat << 'EOF' > src-tauri/build.rs
+          # 6. 写入 build.rs
+          @'
           fn main() {
               tauri_build::build()
           }
-          EOF
+          '@ | Set-Content -Path src-tauri/build.rs -Encoding UTF8
 
-          cat << 'EOF' > src-tauri/src/main.rs
+          # 7. 写入 main.rs
+          @'
           #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
           fn main() {
               tauri::Builder::default()
                   .run(tauri::generate_context!())
                   .expect("运行班主任工作台异常");
           }
-          EOF
+          '@ | Set-Content -Path src-tauri/src/main.rs -Encoding UTF8
 
-          # 6. 直接由 Cargo 工具链编译为独立 Release EXE
+          # 8. 编译并导出 EXE
           cd src-tauri
           cargo build --release
-
-          # 7. 导出最终成品
-          cp target/release/class-master.exe ../班主任工作台.exe
+          cd ..
+          Copy-Item src-tauri/target/release/class-master.exe 班主任工作台.exe
 
       - name: 归档并导出 EXE 文件
         uses: actions/upload-artifact@v4
