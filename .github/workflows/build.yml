@@ -12,18 +12,12 @@ jobs:
       - name: 检出仓库源码
         uses: actions/checkout@v4
 
-      - name: 配置 Node.js 环境
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: 配置 Rust 编译工具链
         uses: dtolnay/rust-toolchain@stable
 
-      - name: 组装工程并编译单文件可执行程序
+      - name: 组装工程并直接编译 EXE
         shell: bash
         run: |
-          npm install -g @tauri-apps/cli@1.6.0
           mkdir -p src-tauri/src
           
           cat << 'EOF' > src-tauri/Cargo.toml
@@ -39,6 +33,13 @@ jobs:
           tauri = { version = "1.5", features = ["window-close", "shell-open"] }
           serde = { version = "1.0", features = ["derive"] }
           serde_json = "1.0"
+
+          [profile.release]
+          panic = "abort"
+          codegen-units = 1
+          lto = true
+          opt-level = "z"
+          strip = true
           EOF
 
           cat << 'EOF' > src-tauri/tauri.conf.json
@@ -86,10 +87,15 @@ jobs:
           }
           EOF
 
-          npx tauri build --no-bundle
+          # 直接使用 Rust 官方工具链极速编译，避免命令行参数冲突
+          cd src-tauri
+          cargo build --release
+
+          # 复制并命名为中文软件名
+          cp target/release/class-master.exe ../班主任工作台.exe
 
       - name: 归档并导出 EXE 文件
         uses: actions/upload-artifact@v4
         with:
           name: 班主任工作台_Windows免安装版
-          path: src-tauri/target/release/班主任工作台.exe
+          path: 班主任工作台.exe
